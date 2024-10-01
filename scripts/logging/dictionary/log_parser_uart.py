@@ -51,13 +51,14 @@ def main():
         logger.setLevel(logging.INFO)
 
     # Parse the log every second from serial port
+    rem = b''
     with serial.Serial(args.serialPort, args.baudrate) as ser:
         ser.timeout = 2
         while True:
             size = ser.inWaiting()
             if size:
                 data = ser.read(size)
-                parserlib.parser(data, args.dbfile, logger)
+                rem = parserlib.parser(rem + data, args.dbfile, logger)
             time.sleep(1)
 
 if __name__ == "__main__":
