@@ -97,7 +97,7 @@ class LogParserV1(LogParser):
             str_idx /= self.data_types.get_sizeof(DataTypes.INT)
 
             if int(str_idx) not in string_tbl:
-                ret = "<string@0x{0:x}>".format(arg)
+                ret = "<string@0x{0:x}>\n".format(arg)
             else:
                 ret = string_tbl[int(str_idx)]
 
@@ -188,6 +188,9 @@ class LogParserV1(LogParser):
                 if stack_align > 1:
                     arg_offset = int((arg_offset + (align - 1)) / align) * align
 
+                if len(arg_list) < arg_offset + size:
+                    raise ValueError("Input package too small")
+
                 one_arg = struct.unpack_from(unpack_fmt, arg_list, arg_offset)[0]
 
                 if fmt == 's':
@@ -260,6 +263,12 @@ class LogParserV1(LogParser):
     def parse_one_normal_msg(self, logdata, offset):
         """Parse one normal log message and print the encoded message"""
         # Parse log message header
+        exp_size = struct.calcsize(self.fmt_msg_hdr)
+        exp_size += struct.calcsize(self.fmt_msg_timestamp)
+        last_offset = offset
+        if len(logdata) < offset + exp_size + 4:
+            return last_offset
+
         log_desc, source_id = struct.unpack_from(self.fmt_msg_hdr, logdata, offset)
         offset += struct.calcsize(self.fmt_msg_hdr)
 
@@ -277,6 +286,8 @@ class LogParserV1(LogParser):
 
         # Skip over data to point to next message (save as return value)
         next_msg_offset = offset + pkg_len + data_len
+        if len(logdata) < next_msg_offset:
+            return last_offset
 
         # Offset from beginning of cbprintf_packaged data to end of va_list arguments
         offset_end_of_args = struct.unpack_from("B", logdata, offset)[0]
@@ -297,12 +308,15 @@ class LogParserV1(LogParser):
         num_rw_str_indexes = struct.unpack_from("B", logdata, offset+3)[0]
         offset_end_of_args += num_rw_str_indexes
 
+        if len(logdata) < offset_end_of_args:
+            return last_offset
+
         # Extract the string table in the packaged log message
         string_tbl = self.extract_string_table(logdata[offset_end_of_args:(offset + pkg_len)])
 
         if len(string_tbl) != num_packed_strings:
             logger.error("------ Error extracting string table")
-            return None
+            return last_offset + 1
 
         # Skip packaged string header
         offset += self.data_types.get_sizeof(DataTypes.PTR)
@@ -322,12 +336,18 @@ class LogParserV1(LogParser):
 
         if not fmt_str:
             logger.error("------ Error getting format string at 0x%x", fmt_str_ptr)
-            return None
+            return last_offset + 1
 
-        args = self.process_one_fmt_str(fmt_str, logdata[offset:offset_end_of_args], string_tbl)
+        try:
+            args = self.process_one_fmt_str(fmt_str, logdata[offset:offset_end_of_args], string_tbl)
+        except ValueError:
+            return last_offset
 
         fmt_str = formalize_fmt_string(fmt_str)
-        log_msg = fmt_str % args
+        try:
+            log_msg = fmt_str % args
+        except:
+            return last_offset + 1
 
         if level == 0:
             print(f"{log_msg}", end='')
@@ -336,8 +356,12 @@ class LogParserV1(LogParser):
             print(f"{color}%s%s{Fore.RESET}" % (log_prefix, log_msg))
 
         if data_len > 0:
+            # Skip hexdumps.
+            # It is far more often to loose sync than encounter a hexdump in logs.
+            return last_offset + 1
             # Has hexdump data
-            self.print_hexdump(extra_data, len(log_prefix), color)
+            # log_prefix = f"[{timestamp:>10}] <{level_str}> {source_id_str}: "
+            # self.print_hexdump(extra_data, len(log_prefix), color)
 
         # Point to next message
         return next_msg_offset
@@ -348,27 +372,34 @@ class LogParserV1(LogParser):
         offset = 0
 
         while offset < len(logdata):
+            exp_size = struct.calcsize(self.fmt_msg_type)
+            last_offset = offset
+            if len(logdata) < last_offset + exp_size:
+                return logdata[last_offset:]
             # Get message type
             msg_type = struct.unpack_from(self.fmt_msg_type, logdata, offset)[0]
             offset += struct.calcsize(self.fmt_msg_type)
 
             if msg_type == MSG_TYPE_DROPPED:
+                exp_size += struct.calcsize(self.fmt_dropped_cnt)
+                if len(logdata) < last_offset + exp_size:
+                    return logdata[last_offset:]
                 num_dropped = struct.unpack_from(self.fmt_dropped_cnt, logdata, offset)
                 offset += struct.calcsize(self.fmt_dropped_cnt)
 
                 print(f"--- {num_dropped} messages dropped ---")
 
             elif msg_type == MSG_TYPE_NORMAL:
-                ret = self.parse_one_normal_msg(logdata, offset)
-                if ret is None:
-                    return False
+                new_offset = self.parse_one_normal_msg(logdata, offset)
+                if new_offset is None:
+                    return logdata[last_offset:]
 
-                offset = ret
+                offset = new_offset
 
             else:
                 logger.error("------ Unknown message type: %s", msg_type)
-                return False
+                continue
 
-        return True
+        return logdata[offset:]
 
 colorama.init()

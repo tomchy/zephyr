@@ -42,9 +42,11 @@ def parser(logdata, dbfile, logger):
         else:
             logger.debug("# Endianness: Big")
 
-        ret = log_parser.parse_log_data(logdata)
-        if not ret:
+        rem = log_parser.parse_log_data(logdata)
+        if rem is None:
             logger.error("ERROR: there were error(s) parsing log data")
             sys.exit(1)
+        return rem
     else:
         logger.error("ERROR: Cannot find a suitable parser matching database version!")
+        return b''
