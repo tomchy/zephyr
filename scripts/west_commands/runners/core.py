@@ -742,24 +742,56 @@ class ZephyrBinaryRunner(abc.ABC):
         return None
 
     @staticmethod
+    def get_chosen_flash_address(build_dir: str):
+        '''Get the address corresponding to the zephyr,flash.'''
+        b = pathlib.Path(build_dir)
+        edt_pickle = b / 'zephyr' / 'edt.pickle'
+        if not edt_pickle.is_file():
+            raise RuntimeError('cannot load devicetree; expected to find:' +
+                               str(edt_pickle))
+
+        # Load the devicetree.
+        try:
+            with open(edt_pickle, 'rb') as f:
+                edt = pickle.load(f)
+        except ModuleNotFoundError as err:
+            raise RuntimeError('could not load devicetree, something may be'
+                               'wrong with the python environment') from err
+
+        # Find the zephyr,flash node.
+        node = edt.chosen_node('zephyr,flash')
+        if node is not None:
+            return node.regs[0].addr
+
+        return None
+
+    @staticmethod
     def flash_address_from_build_conf(build_conf: BuildConfiguration):
         '''If CONFIG_USE_DT_CODE_PARTITION return zephyr,code-partition
-        offset + CONFIG_FLASH_BASE_ADDRESS.
+        offset + <flash_base_address>.
         If CONFIG_HAS_FLASH_LOAD_OFFSET is n in build_conf,
-        return the CONFIG_FLASH_BASE_ADDRESS value. Otherwise, return
-        CONFIG_FLASH_BASE_ADDRESS + CONFIG_FLASH_LOAD_OFFSET.
+        return the <flash_base_address> value. Otherwise, return
+        <flash_base_address> + CONFIG_FLASH_LOAD_OFFSET.
+        The <flash_base_address> value is defined by the address of
+        zephyr,flash chosen node if CONFIG_USE_DT_FLASH is enabled.
+        Otherwise, the CONFIG_FLASH_BASE_ADDRESS Kconfig value is used.
         '''
+        if build_conf.getboolean('CONFIG_USE_DT_FLASH'):
+            flash_base_address = get_chosen_flash_address(build_conf.build_dir)
+        else:
+            flash_base_address = build_conf['CONFIG_FLASH_BASE_ADDRESS']
+
         if build_conf.getboolean('CONFIG_USE_DT_CODE_PARTITION'):
             offset = ZephyrBinaryRunner.get_chosen_code_partition_offset(build_conf.build_dir)
             if offset is None:
                 raise RuntimeError('The device tree zephyr,code-partition chosen'
                                    ' node must be defined.')
-            return build_conf['CONFIG_FLASH_BASE_ADDRESS'] + offset
+            return build_conf['flash_base_address'] + offset
         elif build_conf.getboolean('CONFIG_HAS_FLASH_LOAD_OFFSET'):
-            return (build_conf['CONFIG_FLASH_BASE_ADDRESS'] +
+            return (build_conf['flash_base_address'] +
                     build_conf['CONFIG_FLASH_LOAD_OFFSET'])
         else:
-            return build_conf['CONFIG_FLASH_BASE_ADDRESS']
+            return build_conf['flash_base_address']
 
     @staticmethod
     def sram_address_from_build_conf(build_conf: BuildConfiguration):

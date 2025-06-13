@@ -9,14 +9,21 @@
 
 #include <zephyr/arch/arm/cortex_m/arm_mpu_mem_cfg.h>
 
+#if CONFIG_USE_DT_FLASH
+#define FLASH_BASE_ADDRESS DT_REG_ADDR(DT_CHOSEN(zephyr_flash))
+#define FLASH_SIZE         DT_REG_SIZE(DT_CHOSEN(zephyr_flash))
+#else
+#define FLASH_BASE_ADDRESS CONFIG_FLASH_BASE_ADDRESS
+#define FLASH_SIZE         CONFIG_FLASH_SIZE
+#endif
+
 static const struct arm_mpu_region mpu_regions[] = {
 #ifdef CONFIG_XIP
 	/* Region 0 */
-	MPU_REGION_ENTRY("FLASH_0",
-			 CONFIG_FLASH_BASE_ADDRESS,
+	MPU_REGION_ENTRY("FLASH_0", FLASH_BASE_ADDRESS,
 #if defined(CONFIG_ARMV8_M_BASELINE) || defined(CONFIG_ARMV8_M_MAINLINE)
-			 REGION_FLASH_ATTR(CONFIG_FLASH_BASE_ADDRESS, \
-				 CONFIG_FLASH_SIZE * 1024)),
+			 REGION_FLASH_ATTR(FLASH_BASE_ADDRESS, \
+				 FLASH_SIZE * 1024)),
 #else
 			 REGION_FLASH_ATTR(REGION_FLASH_SIZE)),
 #endif

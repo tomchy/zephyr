@@ -19,8 +19,12 @@
 
 /* Assumption: our devices have less than 64MB of memory */
 #define RESERVED_MEM_MAP (CONFIG_SRAM_BASE_ADDRESS + 0x4000000)
-#define FLASH_MEM         CONFIG_FLASH_BASE_ADDRESS
 #define RAM_MEM           CONFIG_SRAM_BASE_ADDRESS
+#if CONFIG_USE_DT_FLASH
+#define FLASH_MEM DT_REG_ADDR(DT_CHOSEN(zephyr_flash))
+#else
+#define FLASH_MEM CONFIG_FLASH_BASE_ADDRESS
+#endif
 
 /* MPU test command help texts */
 #define READ_CMD_HELP  "Read from a reserved address in the memory map"

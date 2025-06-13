@@ -233,9 +233,13 @@ if ARC || ARM || ARM64 || X86 || RISCV || RX
 # Workaround for not being able to have commas in macro arguments
 DT_CHOSEN_Z_FLASH := zephyr,flash
 
+config USE_DT_FLASH
+	bool "Use /chosen/zephyr,flash from devicetree to get flash base address and size"
+	default y if (XIP && (ARM ||ARM64)) || !ARM
+
 config FLASH_SIZE
 	int "Flash Size in kB"
-	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_FLASH),0,K) if (XIP && (ARM ||ARM64)) || !ARM
+	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_FLASH),0,K) if USE_DT_FLASH
 	default 0 if !XIP
 	help
 	  This option specifies the size of the flash in kB.  It is normally set by
@@ -244,7 +248,7 @@ config FLASH_SIZE
 
 config FLASH_BASE_ADDRESS
 	hex "Flash Base Address"
-	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_FLASH)) if (XIP && (ARM || ARM64)) || !ARM
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_FLASH)) if USE_DT_FLASH
 	default 0 if !XIP
 	help
 	  This option specifies the base address of the flash on the board. It is

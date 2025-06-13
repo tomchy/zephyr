@@ -15,6 +15,12 @@
 #include <zephyr/mem_mgmt/mem_attr.h>
 #include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 
+#if CONFIG_USE_DT_FLASH
+#define FLASH_BASE_ADDRESS DT_REG_ADDR(DT_CHOSEN(zephyr_flash))
+#else
+#define FLASH_BASE_ADDRESS CONFIG_FLASH_BASE_ADDRESS
+#endif
+
 #define LOG_LEVEL CONFIG_MPU_LOG_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(mpu);
@@ -484,7 +490,7 @@ int z_arm_mpu_init(void)
 	 */
 #if defined(CONFIG_NULL_POINTER_EXCEPTION_DETECTION_MPU)
 #if (defined(CONFIG_ARMV8_M_BASELINE) || defined(CONFIG_ARMV8_M_MAINLINE)) && \
-	(CONFIG_FLASH_BASE_ADDRESS > CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE) && \
+	(FLASH_BASE_ADDRESS > CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE) && \
 	(!DT_NULL_PAGE_DETECT_NODE_EXIST)
 
 #pragma message "Null-Pointer exception detection cannot be configured on un-mapped flash areas"
